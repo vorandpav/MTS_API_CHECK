@@ -7,7 +7,7 @@ app.use(express.json());
 
 const TRUE_TABS_TOKEN = process.env.TRUE_TABS_TOKEN;
 const ORS_API_KEY = process.env.ORS_API_KEY;
-const START_POINT = process.env.START_POINT; // Начальная точка (lon,lat)
+const START_POINT = process.env.START_POINT;
 
 async function getCoordinates(address) {
     try {
@@ -18,12 +18,7 @@ async function getCoordinates(address) {
                 size: 1
             }
         });
-
-        const features = response.data.features;
-        if (!features.length) return null;
-
-        const [lon, lat] = features[0].geometry.coordinates;
-        return `${lon},${lat}`;
+        return response.data.features[0]?.geometry.coordinates;
     } catch (error) {
         console.error("Ошибка при геокодировании:", error.message);
         return null;
@@ -38,35 +33,31 @@ app.post("/get-travel-time", async (req, res) => {
     }
 
     try {
-        const endPoint = await getCoordinates(address);
-        if (!endPoint) return res.status(400).json({ error: "Не удалось найти адрес" });
+        // Геокодирование адреса
+        const coords = await getCoordinates(address);
+        if (!coords) return res.status(400).json({ error: "Адрес не найден" });
+        const endPoint = coords.join(',');
 
+        // Расчет маршрута
         const routeResponse = await axios.post(
             "https://api.openrouteservice.org/v2/directions/driving-car",
             {
                 coordinates: [
                     START_POINT.split(",").map(Number),
-                    endPoint.split(",").map(Number)
+                    coords
                 ]
             },
-            {
-                headers: { Authorization: `Bearer ${ORS_API_KEY}` }
-            }
+            { headers: { Authorization: `Bearer ${ORS_API_KEY} } }
         );
 
-        const route = routeResponse.data.routes[0];
-        if (!route) return res.status(500).json({ error: "Не удалось рассчитать маршрут" });
+        const travelTime = Math.round(routeResponse.data.routes[0].summary.duration / 60);
 
-        const travelTime = Math.round(route.summary.duration / 60);
-
-        // Обновление записи в Tabs Sale
-        await axios.post(
+        // Отправка в Tabs Sale
+        const tabsResponse = await axios.post(
             `https://true.tabs.sale/fusion/v1/datasheets/${dstId}/records`,
             [{
-                recordId: recordId,
-                fields: {
-                    'Время доставки': `${travelTime} мин`
-                }
+                recordId,
+                fields: { 'Время доставки': `${travelTime} мин` }
             }],
             {
                 headers: {
@@ -76,19 +67,35 @@ app.post("/get-travel-time", async (req, res) => {
             }
         );
 
+        // Формирование ответа
         res.json({
-            from: START_POINT,
-            to: address,
-            travel_time: `${travelTime} мин`,
-            updateStatus: "success"
+            route: {
+                from: START_POINT,
+                to: address,
+                coordinates: coords,
+                travel_time: `${travelTime} мин`
+            },
+            deliveryStatus: {
+                status: "success",
+                httpStatus: tabsResponse.status,
+                responseData: tabsResponse.data,
+                updatedAt: new Date().toISOString()
+            }
         });
 
     } catch (error) {
         console.error("Ошибка:", error.response?.data || error.message);
-        const statusCode = error.response?.status || 500;
-        res.status(statusCode).json({
-            error: error.response?.data?.error || "Ошибка сервера"
-        });
+        
+        const errorResponse = {
+            error: error.response?.data?.error || "Internal Server Error",
+            deliveryStatus: {
+                status: "error",
+                httpStatus: error.response?.status || 500,
+                errorDetails: error.response?.data || error.message
+            }
+        };
+
+        res.status(errorResponse.deliveryStatus.httpStatus).json(errorResponse);
     }
 });
 

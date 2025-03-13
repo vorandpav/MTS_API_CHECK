@@ -5,27 +5,27 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const YANDEX_API_KEY = process.env.YANDEX_API_KEY;
-const START_POINT = process.env.START_POINT; // Координаты старта (lat,lon)
+const ORS_API_KEY = process.env.ORS_API_KEY;
+const START_POINT = process.env.START_POINT; // Начальная точка (lon,lat)
 
-// Функция для получения координат по адресу
+// Функция для получения координат по адресу через ORS Geocoding API
 async function getCoordinates(address) {
     try {
-        const response = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
+        const response = await axios.get("https://api.openrouteservice.org/geocode/search", {
             params: {
-                apikey: YANDEX_API_KEY,
-                geocode: address,
-                format: "json"
+                api_key: ORS_API_KEY,
+                text: address,
+                size: 1
             }
         });
 
-        const geoObject = response.data.response.GeoObjectCollection.featureMember[0]?.GeoObject;
-        if (!geoObject) return null;
+        const features = response.data.features;
+        if (!features.length) return null;
 
-        const [lon, lat] = geoObject.Point.pos.split(" "); // Яндекс отдаёт lon,lat
-        return `${lat},${lon}`; // Нужно lat,lon
+        const [lon, lat] = features[0].geometry.coordinates;
+        return `${lon},${lat}`; // ORS требует lon,lat
     } catch (error) {
-        console.error("Ошибка при получении координат:", error.message);
+        console.error("Ошибка при геокодировании:", error.message);
         return null;
     }
 }
@@ -39,18 +39,23 @@ app.post("/get-travel-time", async (req, res) => {
         const endPoint = await getCoordinates(address);
         if (!endPoint) return res.status(400).json({ error: "Не удалось найти адрес" });
 
-        const response = await axios.get("https://api.routing.yandex.net/v2/routes", {
-            params: {
-                apikey: YANDEX_API_KEY,
-                waypoints: `${START_POINT}|${endPoint}`,
-                mode: "driving"
+        const response = await axios.post(
+            "https://api.openrouteservice.org/v2/directions/driving-car",
+            {
+                coordinates: [
+                    START_POINT.split(",").map(Number),
+                    endPoint.split(",").map(Number)
+                ]
+            },
+            {
+                headers: { Authorization: `Bearer ${ORS_API_KEY}` }
             }
-        });
+        );
 
         const route = response.data.routes[0];
         if (!route) return res.status(500).json({ error: "Не удалось рассчитать маршрут" });
 
-        const travelTime = Math.round(route.legs[0].duration.value / 60); // Минуты
+        const travelTime = Math.round(route.summary.duration / 60); // Минуты
 
         res.json({ from: START_POINT, to: address, travel_time: `${travelTime} мин` });
     } catch (error) {

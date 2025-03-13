@@ -78,7 +78,8 @@ app.post("/get-travel-time", async (req, res) => {
             },
             deliveryStatus: {
                 status: "success",
-                httpStatus: 200,
+                httpStatus: tabsResponse.status,
+                responseData: tabsResponse.data, // <-- Вернул вывод ответа Tabs
                 updatedAt: new Date().toISOString()
             }
         });

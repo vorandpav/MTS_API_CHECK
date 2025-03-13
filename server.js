@@ -55,7 +55,7 @@ app.post("/get-travel-time", async (req, res) => {
 
         const travelTime = Math.round(routeResponse.data.routes[0].summary.duration / 60);
 
-        await axios.post(
+        const tabsResponse = await axios.post(
             `https://true.tabs.sale/fusion/v1/datasheets/${dstId}/records`,
             [{
                 recordId,
@@ -68,7 +68,8 @@ app.post("/get-travel-time", async (req, res) => {
                 }
             }
         );
-
+        
+        // Формирование ответа с данными Tabs
         res.json({
             route: {
                 from: START_POINT,

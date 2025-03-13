@@ -55,7 +55,7 @@ app.post("/get-travel-time", async (req, res) => {
 
         const travelTime = Math.round(routeResponse.data.routes[0].summary.duration / 60);
 
-       const tabsResponse = await axios.post(
+       const tabsResponse = await axios.patch(
             `https://true.tabs.sale/fusion/v1/datasheets/${dstId}/records`,
             {
                 records: [{
@@ -63,7 +63,8 @@ app.post("/get-travel-time", async (req, res) => {
                     fields: {
                         'Время доставки': `${travelTime} мин`
                     }
-                }]
+                }],
+                'fieldKey': 'name'
             },
             {
                 headers: {

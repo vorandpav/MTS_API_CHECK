@@ -33,12 +33,11 @@ app.post("/get-travel-time", async (req, res) => {
     }
 
     try {
-        // Геокодирование адреса
         const coords = await getCoordinates(address);
         if (!coords) return res.status(400).json({ error: "Адрес не найден" });
         const endPoint = coords.join(',');
 
-        // Расчет маршрута
+        // Исправленный блок запроса маршрута
         const routeResponse = await axios.post(
             "https://api.openrouteservice.org/v2/directions/driving-car",
             {
@@ -47,13 +46,16 @@ app.post("/get-travel-time", async (req, res) => {
                     coords
                 ]
             },
-            { headers: { Authorization: `Bearer ${ORS_API_KEY} } }
+            { 
+                headers: { 
+                    Authorization: `Bearer ${ORS_API_KEY}` 
+                } 
+            }
         );
 
         const travelTime = Math.round(routeResponse.data.routes[0].summary.duration / 60);
 
-        // Отправка в Tabs Sale
-        const tabsResponse = await axios.post(
+        await axios.post(
             `https://true.tabs.sale/fusion/v1/datasheets/${dstId}/records`,
             [{
                 recordId,
@@ -67,7 +69,6 @@ app.post("/get-travel-time", async (req, res) => {
             }
         );
 
-        // Формирование ответа
         res.json({
             route: {
                 from: START_POINT,
@@ -77,8 +78,7 @@ app.post("/get-travel-time", async (req, res) => {
             },
             deliveryStatus: {
                 status: "success",
-                httpStatus: tabsResponse.status,
-                responseData: tabsResponse.data,
+                httpStatus: 200,
                 updatedAt: new Date().toISOString()
             }
         });
@@ -86,16 +86,14 @@ app.post("/get-travel-time", async (req, res) => {
     } catch (error) {
         console.error("Ошибка:", error.response?.data || error.message);
         
-        const errorResponse = {
+        res.status(error.response?.status || 500).json({
             error: error.response?.data?.error || "Internal Server Error",
             deliveryStatus: {
                 status: "error",
                 httpStatus: error.response?.status || 500,
                 errorDetails: error.response?.data || error.message
             }
-        };
-
-        res.status(errorResponse.deliveryStatus.httpStatus).json(errorResponse);
+        });
     }
 });
 

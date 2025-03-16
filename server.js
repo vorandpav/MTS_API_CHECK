@@ -63,7 +63,7 @@ app.post("/get-travel-time", async (req, res) => {
                 records: [{
                     recordId: recordId,
                     fields: {
-                        "Время доставки": `${travelTime} мин`
+                        "Время пути": `${travelTime} мин`
                     }
                 }],
                 fieldKey: "name"

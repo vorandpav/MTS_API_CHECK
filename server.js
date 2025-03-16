@@ -7,7 +7,6 @@ app.use(express.json());
 
 const TRUE_TABS_TOKEN = process.env.TRUE_TABS_TOKEN;
 const ORS_API_KEY = process.env.ORS_API_KEY;
-const START_POINT = process.env.START_POINT;
 
 async function getCoordinates(address) {
     try {
@@ -26,24 +25,24 @@ async function getCoordinates(address) {
 }
 
 app.post("/get-travel-time", async (req, res) => {
-    const { address, dstId, recordId } = req.body;
+    const {from, to, dstId, recordId } = req.body;
     
-    if (!address || !dstId || !recordId) {
+    if (!from || !to || !dstId || !recordId) {
         return res.status(400).json({ error: "Необходимы адрес, dstId и recordId" });
     }
 
     try {
-        const coords = await getCoordinates(address);
+        const fromCoords = await getCoordinates(from);
+        const toCoords = await getCoordinates(to);
         if (!coords) return res.status(400).json({ error: "Адрес не найден" });
         const endPoint = coords.join(',');
 
-        // Исправленный блок запроса маршрута
         const routeResponse = await axios.post(
             "https://api.openrouteservice.org/v2/directions/driving-car",
             {
                 coordinates: [
-                    START_POINT.split(",").map(Number),
-                    coords
+                    formCoords,
+                    toCoords
                 ]
             },
             { 
@@ -77,15 +76,14 @@ app.post("/get-travel-time", async (req, res) => {
         // Формирование ответа с данными Tabs
         res.json({
             route: {
-                from: START_POINT,
-                to: address,
-                coordinates: coords,
+                from: from,
+                to: to,
                 travel_time: `${travelTime} мин`
             },
             deliveryStatus: {
                 status: "success",
                 httpStatus: tabsResponse.status,
-                responseData: tabsResponse.data, // <-- Вернул вывод ответа Tabs
+                responseData: tabsResponse.data,
                 updatedAt: new Date().toISOString()
             }
         });

@@ -34,14 +34,16 @@ app.post("/get-travel-time", async (req, res) => {
     try {
         const fromCoords = await getCoordinates(from);
         const toCoords = await getCoordinates(to);
-        if (!coords) return res.status(400).json({ error: "Адрес не найден" });
-        const endPoint = coords.join(',');
+        if (!fromCoords or !toCoords) return res.status(400).json({ error: "Адрес не найден" });
+
+        const startPoint = fromCoords.join(',');
+        const endPoint = toCoords.join(',');
 
         const routeResponse = await axios.post(
             "https://api.openrouteservice.org/v2/directions/driving-car",
             {
                 coordinates: [
-                    formCoords,
+                    fromCoords,
                     toCoords
                 ]
             },
@@ -76,8 +78,8 @@ app.post("/get-travel-time", async (req, res) => {
         // Формирование ответа с данными Tabs
         res.json({
             route: {
-                from: from,
-                to: to,
+                from: startPoint,
+                to: endPoint,
                 travel_time: `${travelTime} мин`
             },
             deliveryStatus: {

@@ -17,7 +17,7 @@ async function getCoordinates(address) {
                 size: 1
             }
         });
-        return response.data.features[0]?.geometry.coordinates;
+        return response.data.features?.[0]?.geometry.coordinates || null;
     } catch (error) {
         console.error("Ошибка при геокодировании:", error.message);
         return null;
@@ -25,7 +25,7 @@ async function getCoordinates(address) {
 }
 
 app.post("/get-travel-time", async (req, res) => {
-    const {from, to, dstId, recordId } = req.body;
+    const { from, to, dstId, recordId } = req.body;
     
     if (!from || !to || !dstId || !recordId) {
         return res.status(400).json({ error: "Необходимы адрес, dstId и recordId" });
@@ -34,52 +34,52 @@ app.post("/get-travel-time", async (req, res) => {
     try {
         const fromCoords = await getCoordinates(from);
         const toCoords = await getCoordinates(to);
-        if (!fromCoords or !toCoords) return res.status(400).json({ error: "Адрес не найден" });
-
-        const startPoint = fromCoords.join(',');
-        const endPoint = toCoords.join(',');
+        if (!fromCoords || !toCoords) {
+            return res.status(400).json({ error: "Адрес не найден" });
+        }
 
         const routeResponse = await axios.post(
             "https://api.openrouteservice.org/v2/directions/driving-car",
             {
-                coordinates: [
-                    fromCoords,
-                    toCoords
-                ]
+                coordinates: [fromCoords, toCoords]
             },
-            { 
-                headers: { 
-                    Authorization: `Bearer ${ORS_API_KEY}` 
-                } 
+            {
+                headers: {
+                    Authorization: `Bearer ${ORS_API_KEY}`,
+                    "Content-Type": "application/json"
+                }
             }
         );
 
+        if (!routeResponse.data.routes || routeResponse.data.routes.length === 0) {
+            return res.status(500).json({ error: "Не удалось получить маршрут" });
+        }
+
         const travelTime = Math.round(routeResponse.data.routes[0].summary.duration / 60);
 
-       const tabsResponse = await axios.patch(
+        const tabsResponse = await axios.patch(
             `https://aitable.ai/fusion/v1/datasheets/${dstId}/records`,
             {
                 records: [{
                     recordId: recordId,
                     fields: {
-                        'Время доставки': `${travelTime} мин`
+                        "Время доставки": `${travelTime} мин`
                     }
                 }],
-                'fieldKey': 'name'
+                fieldKey: "name"
             },
             {
                 headers: {
                     Authorization: `Bearer ${TRUE_TABS_TOKEN}`,
-                    'Content-Type': 'application/json'
+                    "Content-Type": "application/json"
                 }
             }
         );
-        
-        // Формирование ответа с данными Tabs
+
         res.json({
             route: {
-                from: startPoint,
-                to: endPoint,
+                from: fromCoords.join(","),
+                to: toCoords.join(","),
                 travel_time: `${travelTime} мин`
             },
             deliveryStatus: {
@@ -89,10 +89,8 @@ app.post("/get-travel-time", async (req, res) => {
                 updatedAt: new Date().toISOString()
             }
         });
-
     } catch (error) {
         console.error("Ошибка:", error.response?.data || error.message);
-        
         res.status(error.response?.status || 500).json({
             error: error.response?.data?.error || "Internal Server Error",
             deliveryStatus: {
